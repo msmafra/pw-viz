@@ -2,6 +2,7 @@ mod graph;
 mod link;
 mod node;
 mod port;
+mod id;
 
 use crate::pipewire_impl::PipewireMessage;
 use eframe::epi;
@@ -161,9 +162,9 @@ impl GraphUI {
                 name,
                 port_type,
             } => {
-                let port = Port::new(id, name, port_type);
+                let port = Port::new(id, node_id, name, port_type);
 
-                self.graph.add_port(node_name, port);
+                self.graph.add_port(node_name, node_id, port);
             }
 
             PipewireMessage::LinkAdded {

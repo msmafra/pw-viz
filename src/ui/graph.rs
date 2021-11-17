@@ -5,7 +5,7 @@ use egui_nodes::{LinkArgs, NodeArgs, NodeConstructor, PinArgs};
 
 use crate::pipewire_impl::MediaType;
 
-use super::{Theme, link::Link, node::Node, port::Port};
+use super::{Theme, id::{Id, IdAllocator}, link::Link, node::Node, port::Port};
 
 ///Represents changes to any links that might happend in the ui
 ///These changes are used to send updates to the pipewire thread
@@ -22,9 +22,7 @@ pub enum LinkUpdate {
 }
 pub struct Graph {
     nodes_ctx: egui_nodes::Context,
-    /*
-    pw id to 
-    */
+    node_id_allocator: IdAllocator,
     nodes: HashMap<String, Node>, //Node id to Node
     links: HashMap<u32, Link>, //Link id to Link
 }
@@ -36,6 +34,7 @@ impl Graph {
         Self {
             nodes_ctx: egui_nodes::Context::default(),
 
+            node_id_allocator: IdAllocator::new(),
             nodes: HashMap::new(),
             links: HashMap::new(),
         }
@@ -45,7 +44,7 @@ impl Graph {
         .or_insert_with(|| {
             log::debug!("Created new ui node: {}", name);
 
-            Node::new(name)
+            Node::new(self.node_id_allocator.allocate(), name)
         })
     }
     pub fn add_node(&mut self, name: String, id: u32, media_type: Option<MediaType>) {
@@ -53,10 +52,16 @@ impl Graph {
     }
     pub fn remove_node(&mut self, name: &str, id: u32) {
 
+        let mut remove_ui_node = false;
         if let Some(node) = self.nodes.get_mut(name) {
-            node.remove_pw_node(id)
+            remove_ui_node = node.remove_pw_node(id);
         } else {
             log::error!("Node with name: {} was not registered", name);
+        }
+
+        //If there are no more pw nodes remove the ui node
+        if remove_ui_node {
+            self.nodes.remove(name);
         }
     }
     pub fn add_port(&mut self, node_name: String, node_id: u32, port: Port) {
@@ -101,43 +106,43 @@ impl Graph {
         //Node id to in-degree(no. of nodes that output to this node)
         let mut indegrees = self
             .nodes
-            .keys()
-            .map(|&id| {
+            .values()
+            .map(|node| {
                 let count = self
                     .links
                     .values()
-                    .filter(|link| link.to_node == id)
+                    .filter(|link| node.get_pw_node(link.to_node).is_some())
                     .map(|link| link.from_node)
                     .collect::<HashSet<u32>>()
                     .len();
-                (id, count)
+                (node.id(), count)
             })
-            .collect::<HashMap<u32, usize>>();
+            .collect::<HashMap<Id, usize>>();
 
         //Adjacency hashmap, maps node id to neighbouring node ids
         let adj_list = self
             .nodes
-            .keys()
-            .map(|&id| {
+            .values()
+            .map(|node| {
                 let adj = self
                     .links
                     .values()
-                    .filter(|link| link.from_node == id)
+                    .filter(|link| node.get_pw_node(link.from_node).is_some())
                     .map(|link| link.to_node)
-                    .collect::<HashSet<u32>>();
-                (id, adj)
+                    .collect::<HashSet<Id>>();
+                (node, adj)
             })
-            .collect::<HashMap<u32, _>>();
+            .collect::<HashMap<Id, _>>();
 
         //println!("Indegrees {:?}", indegrees);
         //println!("Adj list {:?}", self.adj_list);
 
-        let mut queue: Vec<u32> = Vec::new();
+        let mut queue: Vec<Id> = Vec::new();
 
-        for node_id in self.nodes.keys() {
+        for node in self.nodes.values() {
             //Put nodes which are "detached"(i.e of in-degree=0) from the graph into the queue for processing
-            if indegrees[node_id] == 0 {
-                queue.push(*node_id);
+            if indegrees[&node.id()] == 0 {
+                queue.push(node.id());
             }
         }
 

@@ -2,18 +2,20 @@ use std::{collections::HashMap, hash::Hash};
 
 use crate::pipewire_impl::MediaType;
 
-use super::port::Port;
+use super::{id::Id, port::Port};
 
 #[derive(Debug)]
 pub struct Node {
+    id: Id,
     name: String,
     pw_nodes: HashMap<u32, PwNode>,
     pub(super) position: Option<egui::Pos2>,
 }
 
 impl Node {
-    pub fn new(name: String) -> Self {
+    pub fn new(id: Id, name: String) -> Self {
         Self {
+            id,
             name,
             pw_nodes: HashMap::new(),
             position: None,
@@ -21,6 +23,9 @@ impl Node {
     }
     pub fn name(&self) -> &str {
         &self.name
+    }
+    pub fn id(&self) -> Id {
+        self.id
     }
 
     pub(super) fn add_pw_node(&mut self, id: u32, media_type: Option<MediaType>) {
@@ -30,12 +35,15 @@ impl Node {
             ports: HashMap::new()
         });
     }
-    pub(super) fn remove_pw_node(&mut self, id: u32) {
+    //Use pooling
+    pub(super) fn remove_pw_node(&mut self, id: u32) -> bool {
         self.pw_nodes.remove(&id);
+
+        self.pw_nodes.is_empty()
     }
-    
+
     #[inline]
-    fn get_pw_node(&mut self, id: u32) -> Option<&mut PwNode> {
+    pub fn get_pw_node(&mut self, id: u32) -> Option<&mut PwNode> {
         self.pw_nodes.get_mut(&id)
     }
 
@@ -43,7 +51,7 @@ impl Node {
         let pw_node = self.get_pw_node(node_id);
 
         pw_node
-        .expect(&format!("Coudln't find pipewire node with id {}", port.id()))
+        .expect(&format!("Couldn't find pipewire node with id {}", port.id()))
         .ports.insert(port.id(), port);
     }
     pub fn remove_port(&mut self, node_id: u32, port_id: u32) {
