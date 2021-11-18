@@ -1,8 +1,12 @@
 use std::{collections::HashMap, hash::Hash};
 
+use egui::Widget;
+use egui_nodes::{NodeConstructor, PinArgs};
+use pipewire::prelude::ReadableDict;
+
 use crate::pipewire_impl::MediaType;
 
-use super::{id::Id, port::Port};
+use super::{Theme, id::Id, port::Port};
 
 #[derive(Debug)]
 pub struct Node {
@@ -35,7 +39,7 @@ impl Node {
             ports: HashMap::new()
         });
     }
-    //Use pooling
+    //TODO: Use pooling
     pub(super) fn remove_pw_node(&mut self, id: u32) -> bool {
         self.pw_nodes.remove(&id);
 
@@ -43,7 +47,7 @@ impl Node {
     }
 
     #[inline]
-    pub fn get_pw_node(&mut self, id: u32) -> Option<&mut PwNode> {
+    fn get_pw_node(&mut self, id: u32) -> Option<&mut PwNode> {
         self.pw_nodes.get_mut(&id)
     }
 
@@ -60,6 +64,84 @@ impl Node {
         }
         else {
             log::error!("Pipewire node with id: {} was never added", node_id);
+        }
+    }
+    fn draw_ports(ui_node: &mut NodeConstructor, node: &PwNode, theme: &Theme, debug: bool) {
+        let mut ports = node.ports.values().collect::<Vec<_>>();
+
+        //Sorts ports based on alphabetical ordering
+        ports.sort_by(|a, b| a.name().cmp(b.name()));
+
+        for (ix, port) in ports.iter().enumerate() {
+            let (background, hovered) = match &node.media_type {
+                Some(MediaType::Audio) => (theme.audio_port, theme.audio_port_hovered),
+                Some(MediaType::Video) => (theme.video_port, theme.video_port_hovered),
+                Some(MediaType::Midi) => (egui::Color32::RED, egui::Color32::LIGHT_RED),
+                None => (egui::Color32::GRAY, egui::Color32::LIGHT_GRAY),
+            };
+            let port_name = {
+                if debug {
+                    format!("{} [{}]", port.name(), port.id())
+                } else {
+                    format!("{} ", port.name())
+                }
+            };
+            
+            match port.port_type() {
+                crate::pipewire_impl::PortType::Input => {
+                    ui_node.with_input_attribute(
+                        port.id() as usize,
+                        PinArgs {
+                            background: Some(background),
+                            hovered: Some(hovered),
+                            ..Default::default()
+                        },
+                        |ui| {
+                            egui::Label::new(port_name)
+                                //.text_color(theme.text_color)
+                                .ui(ui)
+                        },
+                    );
+                }
+                crate::pipewire_impl::PortType::Output => {
+                    ui_node.with_output_attribute(
+                        port.id() as usize,
+                        PinArgs {
+                            background: Some(background),
+                            hovered: Some(hovered),
+                            ..Default::default()
+                        },
+                        |ui| {
+                            egui::Label::new(port_name)
+                                //.text_color(theme.text_color)
+                                .ui(ui)
+                        },
+                    );
+                }
+                crate::pipewire_impl::PortType::Unknown => {}
+            }
+        }
+    }
+
+    pub fn draw<'a, 'node>(&'node self, ui: &'a mut egui::Ui, ui_node: &'a mut NodeConstructor<'node>, theme: &'node Theme, debug_view: bool) {
+
+        ui_node.with_title(|ui| egui::Label::new(self.name()).text_color(theme.text_color).ui(ui));
+
+        for (ix, node) in self.pw_nodes.values().enumerate() {
+            let media_type = node.media_type;
+            let kind = match media_type {
+                Some(MediaType::Audio) => "🔉",
+                Some(MediaType::Video) => "💻",
+                Some(MediaType::Midi) => "🎹",
+                None => "",
+            };
+
+            if debug_view {
+                ui_node.with_title(|ui| egui::Label::new(node.id).text_color(theme.text_color).ui(ui));
+            }
+
+            Self::draw_ports(ui_node, node, theme, debug_view);
+
         }
     }
 }

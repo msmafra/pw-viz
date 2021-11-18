@@ -23,7 +23,7 @@ pub enum LinkUpdate {
 pub struct Graph {
     nodes_ctx: egui_nodes::Context,
     node_id_allocator: IdAllocator,
-    nodes: HashMap<String, Node>, //Node id to Node
+    nodes: HashMap<String, Node>, //Node name to Node
     links: HashMap<u32, Link>, //Link id to Link
 }
 
@@ -40,7 +40,7 @@ impl Graph {
         }
     }
     fn get_or_create_node(&mut self, name: String) -> &mut Node {
-        self.nodes.entry(name)
+        self.nodes.entry(name.clone())
         .or_insert_with(|| {
             log::debug!("Created new ui node: {}", name);
 
@@ -51,8 +51,8 @@ impl Graph {
         self.get_or_create_node(name).add_pw_node(id, media_type)
     }
     pub fn remove_node(&mut self, name: &str, id: u32) {
-
         let mut remove_ui_node = false;
+
         if let Some(node) = self.nodes.get_mut(name) {
             remove_ui_node = node.remove_pw_node(id);
         } else {
@@ -61,7 +61,11 @@ impl Graph {
 
         //If there are no more pw nodes remove the ui node
         if remove_ui_node {
-            self.nodes.remove(name);
+            let removed_id = self.nodes.remove(name)
+            .expect("Node was never added")
+            .id();
+
+            self.node_id_allocator.free(removed_id);
         }
     }
     pub fn add_port(&mut self, node_name: String, node_id: u32, port: Port) {
@@ -74,18 +78,26 @@ impl Graph {
             log::error!("Node with name: {} was not registered", node_name);
         }
     }
-    pub fn add_link(&mut self, link: Link) {
-        log::debug!("{}->{}", link.from_port, link.to_port);
+    pub fn add_link(&mut self, id: u32, from_node_name: String, to_node_name: String, from_port: u32, to_port: u32) {
+        log::debug!("{}.{}->{}.{}", from_node_name, from_port, to_node_name, to_port);
 
-        self.links.insert(link.id, link);
-    }
-    #[allow(dead_code)]
-    fn get_link(&self, id: u32) -> Option<&Link> {
-        self.links.get(&id)
-    }
-    #[allow(dead_code)]
-    fn get_link_mut(&mut self, id: u32) -> Option<&mut Link> {
-        self.links.get_mut(&id)
+        let from_node = self.nodes.get(&from_node_name)
+                            .expect("Node with provided name doesn't exist")
+                            .id();
+
+        let to_node = self.nodes.get(&to_node_name)
+                            .expect("Node with provided name doesn't exist")
+                            .id();
+        log::debug!("{:?} {:?}", from_node, to_node);
+
+        self.links.insert(id, Link {
+            id,
+            from_node,
+            to_node,
+            from_port,
+            to_port,
+            active: true
+        });
     }
     pub fn remove_link(&mut self, id: u32) -> Option<Link> {
         let removed = self.links.remove(&id);
@@ -99,8 +111,16 @@ impl Graph {
 
         removed
     }
+    #[allow(dead_code)]
+    fn get_link(&self, id: u32) -> Option<&Link> {
+        self.links.get(&id)
+    }
+    #[allow(dead_code)]
+    fn get_link_mut(&mut self, id: u32) -> Option<&mut Link> {
+        self.links.get_mut(&id)
+    }
     ///Naive, inefficient and weird implementation of Kahn's algorithm
-    fn topo_sort(&self) -> Vec<u32> {
+    fn topo_sort(&self) -> Vec<Id> {
         //FIX ME
 
         //Node id to in-degree(no. of nodes that output to this node)
@@ -111,9 +131,10 @@ impl Graph {
                 let count = self
                     .links
                     .values()
-                    .filter(|link| node.get_pw_node(link.to_node).is_some())
+                    .filter(|link| !link.is_self_link())
+                    .filter(|link| link.to_node == node.id())
                     .map(|link| link.from_node)
-                    .collect::<HashSet<u32>>()
+                    .collect::<HashSet<Id>>()
                     .len();
                 (node.id(), count)
             })
@@ -127,10 +148,11 @@ impl Graph {
                 let adj = self
                     .links
                     .values()
-                    .filter(|link| node.get_pw_node(link.from_node).is_some())
+                    .filter(|link| !link.is_self_link())
+                    .filter(|link| link.from_node == node.id())
                     .map(|link| link.to_node)
                     .collect::<HashSet<Id>>();
-                (node, adj)
+                (node.id(), adj)
             })
             .collect::<HashMap<Id, _>>();
 
@@ -189,8 +211,7 @@ impl Graph {
         //Nodes are currently laid out based on this order
         let order = self.topo_sort();
 
-        //println!("{:?}", order);
-
+        println!("{:?}", order);
         //Ctrl is used to trigger the debug view
         let debug_view = ctx.input().modifiers.ctrl;
 
@@ -199,10 +220,10 @@ impl Graph {
         let mut prev_pos= egui::pos2(ui.available_width()/4.0, ui.available_height()/2.0);
         let mut padding = egui::pos2(75.0, 150.0);
         for node_id in order {
-            let node = self.nodes.get_mut(&node_id).unwrap();
+            let node = self.nodes.values().find(|node|node.id() == node_id).unwrap();
 
             let mut ui_node = NodeConstructor::new(
-                node.id() as usize,
+                node.id().as_usize(),
                 NodeArgs {
                     titlebar: Some(theme.titlebar),
                     titlebar_hovered: Some(theme.titlebar_hovered),
@@ -230,25 +251,7 @@ impl Graph {
 
             prev_pos = node_position;
 
-            let media_type = node.media_type();
-            let kind = match media_type {
-                Some(MediaType::Audio) => "🔉",
-                Some(MediaType::Video) => "💻",
-                Some(MediaType::Midi) => "🎹",
-                None => "",
-            };
-
-            let title = {
-                if debug_view {
-                    format!("{}[{}]{}", node.name(), node.id(), kind) //Display node id if in debug view
-                } else {
-                    format!("{} {}", node.name(), kind)
-                }
-            };
-
-            ui_node.with_title(|ui| egui::Label::new(title).text_color(theme.text_color).ui(ui));
-
-            Self::draw_ports(&mut ui_node, node, theme, debug_view);
+            node.draw(ui, &mut ui_node, theme, debug_view);
 
             ui_nodes.push(ui_node);
 
@@ -265,8 +268,8 @@ impl Graph {
 
         self.nodes_ctx.show(ui_nodes, links, ui);
 
-        for (&id, node) in self.nodes.iter_mut() {
-            node.position = self.nodes_ctx.get_node_pos_screen_space(id as usize);
+        for node in self.nodes.values_mut() {
+            node.position = self.nodes_ctx.get_node_pos_screen_space(node.id().as_usize());
         }
 
         if let Some(link) = self.nodes_ctx.link_destroyed() {
@@ -397,60 +400,5 @@ impl Graph {
     //         None
     //     }
     // }
-    fn draw_ports(ui_node: &mut NodeConstructor, node: &Node, theme: &Theme, debug: bool) {
-        let mut ports = node.ports().values().collect::<Vec<_>>();
-
-        //Sorts ports based on alphabetical ordering
-        ports.sort_by(|a, b| a.name().cmp(b.name()));
-
-        for port in ports {
-            let (background, hovered) = match node.media_type() {
-                Some(MediaType::Audio) => (theme.audio_port, theme.audio_port_hovered),
-                Some(MediaType::Video) => (theme.video_port, theme.video_port_hovered),
-                Some(MediaType::Midi) => (egui::Color32::RED, egui::Color32::LIGHT_RED),
-                None => (egui::Color32::GRAY, egui::Color32::LIGHT_GRAY),
-            };
-            let port_name = {
-                if debug {
-                    format!("{} [{}]", port.name(), port.id())
-                } else {
-                    format!("{} ", port.name())
-                }
-            };
-
-            match port.port_type() {
-                crate::pipewire_impl::PortType::Input => {
-                    ui_node.with_input_attribute(
-                        port.id() as usize,
-                        PinArgs {
-                            background: Some(background),
-                            hovered: Some(hovered),
-                            ..Default::default()
-                        },
-                        |ui| {
-                            egui::Label::new(port_name)
-                                //.text_color(theme.text_color)
-                                .ui(ui)
-                        },
-                    );
-                }
-                crate::pipewire_impl::PortType::Output => {
-                    ui_node.with_output_attribute(
-                        port.id() as usize,
-                        PinArgs {
-                            background: Some(background),
-                            hovered: Some(hovered),
-                            ..Default::default()
-                        },
-                        |ui| {
-                            egui::Label::new(port_name)
-                                //.text_color(theme.text_color)
-                                .ui(ui)
-                        },
-                    );
-                }
-                crate::pipewire_impl::PortType::Unknown => {}
-            }
-        }
-    }
+    
 }

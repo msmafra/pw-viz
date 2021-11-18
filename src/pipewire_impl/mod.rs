@@ -28,8 +28,8 @@ pub enum PipewireMessage {
     },
     LinkAdded {
         id: u32,
-        from_node: u32,
-        to_node: u32,
+        from_node_name: String,
+        to_node_name: String,
 
         from_port: u32,
         to_port: u32,
@@ -223,6 +223,19 @@ fn handle_link(
             let to_port = info.input_port_id();
 
             let mut state = state.borrow_mut();
+
+            let from_node_name = match state.get(from_node)
+                                            .expect("Id wasn't registered") {
+                                                state::GlobalObject::Node { name } => name.clone(),
+                                                _=> unreachable!()
+                                            };
+            let to_node_name = match state.get(from_node)
+                                            .expect("Id wasn't registered") {
+                                                state::GlobalObject::Node { name } => name.clone(),
+                                                _=> unreachable!()
+                                            };
+                                                
+
             if let Some(&state::GlobalObject::Link) = state.get(id) {
                 if info.change_mask().contains(LinkChangeMask::STATE) {
                     sender
@@ -234,8 +247,8 @@ fn handle_link(
                 log::debug!("New pipewire link was added : {}", id);
                 sender
                     .send(PipewireMessage::LinkAdded {
-                        from_node,
-                        to_node,
+                        from_node_name,
+                        to_node_name,
                         from_port,
                         to_port,
                         id,
@@ -304,7 +317,7 @@ fn handle_port(
         _=> {
             unreachable!()
         }
-    };
+    }.clone();
     
 
     let port_type = match props.get("port.direction") {
@@ -324,7 +337,7 @@ fn handle_port(
 
     sender
         .send(PipewireMessage::PortAdded {
-            node_name: node_name.clone(),
+            node_name: node_name,
             node_id,
             id: port.id,
             name,

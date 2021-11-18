@@ -144,7 +144,6 @@ impl GraphUI {
     }
     ///Update the graph ui based on the message sent by the pipewire thread
     fn process_message(&mut self, message: PipewireMessage) {
-        let _graph = &mut self.graph;
 
         match message {
             PipewireMessage::NodeAdded {
@@ -169,21 +168,12 @@ impl GraphUI {
 
             PipewireMessage::LinkAdded {
                 id,
-                from_node,
-                to_node,
+                from_node_name,
+                to_node_name,
                 from_port,
                 to_port,
             } => {
-                let link = Link {
-                    id,
-                    from_node,
-                    to_node,
-                    from_port,
-                    to_port,
-                    active: true,
-                };
-
-                self.graph.add_link(link);
+                self.graph.add_link(id, from_node_name, to_node_name, from_port, to_port);
             }
             PipewireMessage::LinkStateChanged { id: _, active: _ } => {}
 
