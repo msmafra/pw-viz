@@ -11,8 +11,6 @@ use serde::{Deserialize, Serialize};
 use std::sync::mpsc::Receiver;
 
 use graph::Graph;
-use link::Link;
-use node::Node;
 use port::Port;
 
 pub const INITIAL_WIDTH: u32 = 1280;
@@ -22,9 +20,6 @@ pub const INITIAL_HEIGHT: u32 = 720;
 pub enum UiMessage {
     RemoveLink(u32),
     AddLink {
-        from_node: u32,
-        to_node: u32,
-
         from_port: u32,
         to_port: u32,
     },
@@ -264,9 +259,6 @@ impl epi::App for GraphUI {
                             .send(UiMessage::AddLink {
                                 from_port,
                                 to_port,
-
-                                from_node,
-                                to_node,
                             })
                             .expect("Failed to send ui message");
                     }

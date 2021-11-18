@@ -86,7 +86,7 @@ impl Node {
                     format!("{} ", port.name())
                 }
             };
-            
+
             match port.port_type() {
                 crate::pipewire_impl::PortType::Input => {
                     ui_node.with_input_attribute(
@@ -123,7 +123,7 @@ impl Node {
         }
     }
 
-    pub fn draw<'a, 'node>(&'node self, ui: &'a mut egui::Ui, ui_node: &'a mut NodeConstructor<'node>, theme: &'node Theme, debug_view: bool) {
+    pub fn draw<'graph, 'node>(&'node self, ui_node: &'graph mut NodeConstructor<'node>, theme: &'node Theme, debug_view: bool) {
 
         ui_node.with_title(|ui| egui::Label::new(self.name()).text_color(theme.text_color).ui(ui));
 

@@ -679,7 +679,7 @@ dependencies = [
 [[package]]
 name = "egui_nodes"
 version = "0.1.3"
-source = "git+https://github.com/Ax9D/egui_nodes?rev=74eccc4#74eccc4087b474ef4f98b772d8946c3fc17aad0d"
+source = "git+https://github.com/Ax9D/egui_nodes?rev=90474c8#90474c8febf109d0c33facbfb0d31f43a0085717"
 dependencies = [
  "derivative",
  "egui",

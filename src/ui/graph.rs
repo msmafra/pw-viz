@@ -140,6 +140,8 @@ impl Graph {
             })
             .collect::<HashMap<Id, usize>>();
 
+        println!("{:?}", indegrees);
+
         //Adjacency hashmap, maps node id to neighbouring node ids
         let adj_list = self
             .nodes
@@ -251,7 +253,7 @@ impl Graph {
 
             prev_pos = node_position;
 
-            node.draw(ui, &mut ui_node, theme, debug_view);
+            node.draw(&mut ui_node, theme, debug_view);
 
             ui_nodes.push(ui_node);
 

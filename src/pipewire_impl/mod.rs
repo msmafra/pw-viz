@@ -146,11 +146,9 @@ pub fn thread_main(
                 remove_link(link_id, &state, &registry);
             }
             UiMessage::AddLink {
-                from_node,
-                to_node,
                 from_port,
                 to_port,
-            } => add_link(from_port, to_port, from_node, to_node, &core),
+            } => add_link(&state.clone(), from_port, to_port, &core),
             UiMessage::Exit => mainloop.quit(),
         }
     });
@@ -229,7 +227,7 @@ fn handle_link(
                                                 state::GlobalObject::Node { name } => name.clone(),
                                                 _=> unreachable!()
                                             };
-            let to_node_name = match state.get(from_node)
+            let to_node_name = match state.get(to_node)
                                             .expect("Id wasn't registered") {
                                                 state::GlobalObject::Node { name } => name.clone(),
                                                 _=> unreachable!()
@@ -262,7 +260,21 @@ fn handle_link(
         .borrow_mut()
         .insert(link.id, ProxyLink { proxy, listener });
 }
-fn add_link(from_port: u32, to_port: u32, from_node: u32, to_node: u32, core: &Rc<Core>) {
+fn add_link(state: &Rc<RefCell<State>>, from_port: u32, to_port: u32, core: &Rc<Core>) {
+    let state = state.borrow();
+    let from_port_ob = state.get(from_port).expect(&format!("Port with id {} was never registered", from_port));
+    let from_node = *match from_port_ob {
+        state::GlobalObject::Port { node_name, node_id, id } => node_id,
+        _=>unreachable!()
+    };
+
+    let to_port_ob = state.get(to_port).expect(&format!("Port with id {} was never registered", to_port));
+    let to_node = *match to_port_ob {
+        state::GlobalObject::Port { node_name, node_id, id } => node_id,
+        _=>unreachable!()
+    };
+
+
     core.create_object::<pipewire::link::Link, _>(
         "link-factory",
         &pipewire::properties! {
