@@ -1,11 +1,16 @@
 use std::collections::{HashMap, HashSet};
 
-use egui::Widget;
-use egui_nodes::{LinkArgs, NodeArgs, NodeConstructor, PinArgs};
+use egui_nodes::{LinkArgs, NodeArgs, NodeConstructor};
 
 use crate::pipewire_impl::MediaType;
 
-use super::{Theme, id::{Id, IdAllocator}, link::Link, node::Node, port::Port};
+use super::{
+    id::{Id, IdAllocator},
+    link::Link,
+    node::Node,
+    port::Port,
+    Theme,
+};
 
 ///Represents changes to any links that might happend in the ui
 ///These changes are used to send updates to the pipewire thread
@@ -24,7 +29,7 @@ pub struct Graph {
     nodes_ctx: egui_nodes::Context,
     node_id_allocator: IdAllocator,
     nodes: HashMap<String, Node>, //Node name to Node
-    links: HashMap<u32, Link>, //Link id to Link
+    links: HashMap<u32, Link>,    //Link id to Link
 }
 
 impl Graph {
@@ -40,8 +45,7 @@ impl Graph {
         }
     }
     fn get_or_create_node(&mut self, name: String) -> &mut Node {
-        self.nodes.entry(name.clone())
-        .or_insert_with(|| {
+        self.nodes.entry(name.clone()).or_insert_with(|| {
             log::debug!("Created new ui node: {}", name);
 
             Node::new(self.node_id_allocator.allocate(), name)
@@ -61,9 +65,7 @@ impl Graph {
 
         //If there are no more pw nodes remove the ui node
         if remove_ui_node {
-            let removed_id = self.nodes.remove(name)
-            .expect("Node was never added")
-            .id();
+            let removed_id = self.nodes.remove(name).expect("Node was never added").id();
 
             self.node_id_allocator.free(removed_id);
         }
@@ -71,33 +73,53 @@ impl Graph {
     pub fn add_port(&mut self, node_name: String, node_id: u32, port: Port) {
         self.get_or_create_node(node_name).add_port(node_id, port)
     }
-    pub fn remove_port(&mut self, node_name: &str,node_id: u32, port_id: u32) {
+    pub fn remove_port(&mut self, node_name: &str, node_id: u32, port_id: u32) {
         if let Some(node) = self.nodes.get_mut(node_name) {
             node.remove_port(node_id, port_id);
         } else {
             log::error!("Node with name: {} was not registered", node_name);
         }
     }
-    pub fn add_link(&mut self, id: u32, from_node_name: String, to_node_name: String, from_port: u32, to_port: u32) {
-        log::debug!("{}.{}->{}.{}", from_node_name, from_port, to_node_name, to_port);
+    pub fn add_link(
+        &mut self,
+        id: u32,
+        from_node_name: String,
+        to_node_name: String,
+        from_port: u32,
+        to_port: u32,
+    ) {
+        log::debug!(
+            "{}.{}->{}.{}",
+            from_node_name,
+            from_port,
+            to_node_name,
+            to_port
+        );
 
-        let from_node = self.nodes.get(&from_node_name)
-                            .expect("Node with provided name doesn't exist")
-                            .id();
+        let from_node = self
+            .nodes
+            .get(&from_node_name)
+            .expect("Node with provided name doesn't exist")
+            .id();
 
-        let to_node = self.nodes.get(&to_node_name)
-                            .expect("Node with provided name doesn't exist")
-                            .id();
+        let to_node = self
+            .nodes
+            .get(&to_node_name)
+            .expect("Node with provided name doesn't exist")
+            .id();
         log::debug!("{:?} {:?}", from_node, to_node);
 
-        self.links.insert(id, Link {
+        self.links.insert(
             id,
-            from_node,
-            to_node,
-            from_port,
-            to_port,
-            active: true
-        });
+            Link {
+                id,
+                from_node,
+                to_node,
+                from_port,
+                to_port,
+                active: true,
+            },
+        );
     }
     pub fn remove_link(&mut self, id: u32) -> Option<Link> {
         let removed = self.links.remove(&id);
@@ -119,30 +141,28 @@ impl Graph {
     fn get_link_mut(&mut self, id: u32) -> Option<&mut Link> {
         self.links.get_mut(&id)
     }
-    ///Naive, inefficient and weird implementation of Kahn's algorithm
-    fn topo_sort(&self) -> Vec<Id> {
-        //FIX ME
+    fn topo_sort_(
+        node_id: Id,
+        visited: &mut HashSet<Id>,
+        adj_list: &HashMap<Id, HashSet<Id>>,
+        stack: &mut Vec<Id>,
+    ) {
+        visited.insert(node_id);
 
-        //Node id to in-degree(no. of nodes that output to this node)
-        let mut indegrees = self
-            .nodes
-            .values()
-            .map(|node| {
-                let count = self
-                    .links
-                    .values()
-                    .filter(|link| !link.is_self_link())
-                    .filter(|link| link.to_node == node.id())
-                    .map(|link| link.from_node)
-                    .collect::<HashSet<Id>>()
-                    .len();
-                (node.id(), count)
-            })
-            .collect::<HashMap<Id, usize>>();
+        for node_id in &adj_list[&node_id] {
+            if !visited.contains(node_id) {
+                Self::topo_sort_(*node_id, visited, adj_list, stack);
+            }
+        }
 
-        println!("{:?}", indegrees);
+        stack.push(node_id);
+    }
+    //TODO: Handle stack overflows
+    fn top_sort(&self) -> Vec<Id> {
+        let mut stack = Vec::new();
 
-        //Adjacency hashmap, maps node id to neighbouring node ids
+        let mut visited = HashSet::new();
+
         let adj_list = self
             .nodes
             .values()
@@ -158,50 +178,15 @@ impl Graph {
             })
             .collect::<HashMap<Id, _>>();
 
-        //println!("Indegrees {:?}", indegrees);
-        //println!("Adj list {:?}", self.adj_list);
-
-        let mut queue: Vec<Id> = Vec::new();
-
         for node in self.nodes.values() {
-            //Put nodes which are "detached"(i.e of in-degree=0) from the graph into the queue for processing
-            if indegrees[&node.id()] == 0 {
-                queue.push(node.id());
+            if !visited.contains(&node.id()) {
+                Self::topo_sort_(node.id(), &mut visited, &adj_list, &mut stack)
             }
         }
 
-        let mut top_order = Vec::new();
+        stack.reverse();
 
-        let mut count = 0;
-        while !queue.is_empty() {
-            //println!("Queue: {:?}", queue);
-            let u = queue.remove(0); //Remove from the front of the queue
-
-            top_order.push(u);
-
-            if let Some(adj_nodes) = adj_list.get(&u) {
-                //Check nodes that lead out from this node
-                for node_id in adj_nodes {
-                    //Remove link from parent node to this node
-                    let indegree_of_node = indegrees.get_mut(node_id).unwrap();
-                    *indegree_of_node -= 1;
-
-                    //Check if that detached the node from the graph
-                    if *indegree_of_node == 0 {
-                        //If it did, we have a new detached node to process
-                        queue.push(*node_id);
-                    }
-                }
-            }
-
-            count+=1;
-        }
-
-        if count != self.nodes.len() {
-            log::error!("Cycle detected");
-        }
-
-        top_order
+        stack
     }
     pub fn draw(
         &mut self,
@@ -211,18 +196,21 @@ impl Graph {
     ) -> Option<LinkUpdate> {
         //Find the topologically sorted order of nodes in the graph
         //Nodes are currently laid out based on this order
-        let order = self.topo_sort();
-
-        println!("{:?}", order);
+        let order = self.top_sort();
+        
         //Ctrl is used to trigger the debug view
         let debug_view = ctx.input().modifiers.ctrl;
 
         let mut ui_nodes = Vec::with_capacity(self.nodes.len());
 
-        let mut prev_pos= egui::pos2(ui.available_width()/4.0, ui.available_height()/2.0);
+        let mut prev_pos = egui::pos2(ui.available_width() / 4.0, ui.available_height() / 2.0);
         let mut padding = egui::pos2(75.0, 150.0);
         for node_id in order {
-            let node = self.nodes.values().find(|node|node.id() == node_id).unwrap();
+            let node = self
+                .nodes
+                .values()
+                .find(|node| node.id() == node_id)
+                .unwrap();
 
             let mut ui_node = NodeConstructor::new(
                 node.id().as_usize(),
@@ -233,7 +221,6 @@ impl Graph {
                     ..Default::default()
                 },
             );
-
 
             // if node.position.is_none() {
 
@@ -246,7 +233,7 @@ impl Graph {
             // }
 
             let node_position = node.position.unwrap_or_else(|| {
-                padding.y*=-1.0;
+                padding.y *= -1.0;
                 egui::pos2(prev_pos.x + padding.x, prev_pos.y + padding.y)
             });
             ui_node.with_origin(node_position);
@@ -256,7 +243,6 @@ impl Graph {
             node.draw(&mut ui_node, theme, debug_view);
 
             ui_nodes.push(ui_node);
-
         }
 
         let links = self.links.values().map(|link| {
@@ -271,7 +257,9 @@ impl Graph {
         self.nodes_ctx.show(ui_nodes, links, ui);
 
         for node in self.nodes.values_mut() {
-            node.position = self.nodes_ctx.get_node_pos_screen_space(node.id().as_usize());
+            node.position = self
+                .nodes_ctx
+                .get_node_pos_screen_space(node.id().as_usize());
         }
 
         if let Some(link) = self.nodes_ctx.link_destroyed() {
@@ -402,5 +390,4 @@ impl Graph {
     //         None
     //     }
     // }
-    
 }
