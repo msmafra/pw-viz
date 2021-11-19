@@ -51,8 +51,15 @@ impl Graph {
             Node::new(self.node_id_allocator.allocate(), name)
         })
     }
-    pub fn add_node(&mut self, name: String, id: u32, media_type: Option<MediaType>) {
-        self.get_or_create_node(name).add_pw_node(id, media_type)
+    pub fn add_node(
+        &mut self,
+        name: String,
+        id: u32,
+        description: Option<String>,
+        media_type: Option<MediaType>,
+    ) {
+        self.get_or_create_node(name)
+            .add_pw_node(id, description, media_type)
     }
     pub fn remove_node(&mut self, name: &str, id: u32) {
         let mut remove_ui_node = false;
@@ -197,7 +204,7 @@ impl Graph {
         //Find the topologically sorted order of nodes in the graph
         //Nodes are currently laid out based on this order
         let order = self.top_sort();
-        
+
         //Ctrl is used to trigger the debug view
         let debug_view = ctx.input().modifiers.ctrl;
 

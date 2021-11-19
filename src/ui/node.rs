@@ -6,7 +6,7 @@ use pipewire::prelude::ReadableDict;
 
 use crate::pipewire_impl::MediaType;
 
-use super::{Theme, id::Id, port::Port};
+use super::{id::Id, port::Port, Theme};
 
 #[derive(Debug)]
 pub struct Node {
@@ -32,12 +32,21 @@ impl Node {
         self.id
     }
 
-    pub(super) fn add_pw_node(&mut self, id: u32, media_type: Option<MediaType>) {
-        self.pw_nodes.insert(id, PwNode {
+    pub(super) fn add_pw_node(
+        &mut self,
+        id: u32,
+        description: Option<String>,
+        media_type: Option<MediaType>,
+    ) {
+        self.pw_nodes.insert(
             id,
-            media_type,
-            ports: HashMap::new()
-        });
+            PwNode {
+                id,
+                description,
+                media_type,
+                ports: HashMap::new(),
+            },
+        );
     }
     //TODO: Use pooling
     pub(super) fn remove_pw_node(&mut self, id: u32) -> bool {
@@ -55,18 +64,21 @@ impl Node {
         let pw_node = self.get_pw_node(node_id);
 
         pw_node
-        .expect(&format!("Couldn't find pipewire node with id {}", port.id()))
-        .ports.insert(port.id(), port);
+            .expect(&format!(
+                "Couldn't find pipewire node with id {}",
+                port.id()
+            ))
+            .ports
+            .insert(port.id(), port);
     }
     pub fn remove_port(&mut self, node_id: u32, port_id: u32) {
         if let Some(pw_node) = self.pw_nodes.get_mut(&node_id) {
             pw_node.ports.remove(&port_id);
-        }
-        else {
+        } else {
             log::error!("Pipewire node with id: {} was never added", node_id);
         }
     }
-    fn draw_ports(ui_node: &mut NodeConstructor, node: &PwNode, theme: &Theme, debug: bool) {
+    fn draw_ports<'graph, 'node>(ui_node: &'graph mut NodeConstructor<'node>, node: &'node PwNode, theme: &'node Theme, debug: bool) {
         let mut ports = node.ports.values().collect::<Vec<_>>();
 
         //Sorts ports based on alphabetical ordering
@@ -87,45 +99,93 @@ impl Node {
                 }
             };
 
+            let first = debug && ix == 0;
+
+            let node_desc_str = if let Some(desc) = &node.description {
+                desc
+            } else {
+                ""
+            };
+
+            let node_desc = format!("{} [{}]", node_desc_str, node.id);
+
             match port.port_type() {
                 crate::pipewire_impl::PortType::Input => {
-                    ui_node.with_input_attribute(
-                        port.id() as usize,
-                        PinArgs {
-                            background: Some(background),
-                            hovered: Some(hovered),
-                            ..Default::default()
-                        },
-                        |ui| {
-                            egui::Label::new(port_name)
-                                //.text_color(theme.text_color)
-                                .ui(ui)
-                        },
-                    );
+                    if first {
+
+                        ui_node.with_input_attribute(
+                            port.id() as usize,
+                            PinArgs {
+                                background: Some(background),
+                                hovered: Some(hovered),
+                                ..Default::default()
+                            },
+                            move |ui| {
+                                ui.add(egui::Label::new(node_desc).text_color(egui::Color32::WHITE));
+                                ui.label(port_name)
+                            },
+                        );
+                    }
+                    else {
+                        ui_node.with_input_attribute(
+                            port.id() as usize,
+                            PinArgs {
+                                background: Some(background),
+                                hovered: Some(hovered),
+                                ..Default::default()
+                            },
+                            |ui| {
+                                ui.label(port_name)
+                            },
+                        );
+                    }
                 }
                 crate::pipewire_impl::PortType::Output => {
-                    ui_node.with_output_attribute(
-                        port.id() as usize,
-                        PinArgs {
-                            background: Some(background),
-                            hovered: Some(hovered),
-                            ..Default::default()
-                        },
-                        |ui| {
-                            egui::Label::new(port_name)
-                                //.text_color(theme.text_color)
-                                .ui(ui)
-                        },
-                    );
+                    if first {
+
+                        ui_node.with_output_attribute(
+                            port.id() as usize,
+                            PinArgs {
+                                background: Some(background),
+                                hovered: Some(hovered),
+                                ..Default::default()
+                            },
+                            move |ui| {
+                                ui.add(egui::Label::new(node_desc).text_color(egui::Color32::WHITE));
+                                ui.label(port_name)
+                            },
+                        );
+                    }
+                    else {
+                        ui_node.with_output_attribute(
+                            port.id() as usize,
+                            PinArgs {
+                                background: Some(background),
+                                hovered: Some(hovered),
+                                ..Default::default()
+                            },
+                            |ui| {
+                                ui.label(port_name)
+                            },
+                        );
+                    }
                 }
                 crate::pipewire_impl::PortType::Unknown => {}
             }
         }
     }
 
-    pub fn draw<'graph, 'node>(&'node self, ui_node: &'graph mut NodeConstructor<'node>, theme: &'node Theme, debug_view: bool) {
-
-        ui_node.with_title(|ui| egui::Label::new(self.name()).text_color(theme.text_color).ui(ui));
+    pub fn draw<'graph, 'node>(
+        &'node self,
+        ui_node: &'graph mut NodeConstructor<'node>,
+        theme: &'node Theme,
+        debug_view: bool,
+    ) {
+        ui_node.with_title(|ui| {
+            egui::Label::new(self.name())
+                .text_color(theme.text_color)
+                .ui(ui)
+        });
 
         for (ix, node) in self.pw_nodes.values().enumerate() {
             let media_type = node.media_type;
@@ -136,12 +196,7 @@ impl Node {
                 None => "",
             };
 
-            if debug_view {
-                ui_node.with_title(|ui| egui::Label::new(node.id).text_color(theme.text_color).ui(ui));
-            }
-
             Self::draw_ports(ui_node, node, theme, debug_view);
-
         }
     }
 }
@@ -149,9 +204,7 @@ impl Node {
 #[derive(Debug)]
 struct PwNode {
     id: u32, //Pipewire id of the node
+    description: Option<String>,
     media_type: Option<MediaType>,
-    ports: HashMap<u32, Port>
-}
-
-impl PwNode {
+    ports: HashMap<u32, Port>,
 }

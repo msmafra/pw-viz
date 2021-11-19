@@ -1,8 +1,8 @@
 mod graph;
+mod id;
 mod link;
 mod node;
 mod port;
-mod id;
 
 use crate::pipewire_impl::PipewireMessage;
 use eframe::epi;
@@ -19,10 +19,7 @@ pub const INITIAL_HEIGHT: u32 = 720;
 #[derive(Debug)]
 pub enum UiMessage {
     RemoveLink(u32),
-    AddLink {
-        from_port: u32,
-        to_port: u32,
-    },
+    AddLink { from_port: u32, to_port: u32 },
     Exit,
 }
 #[derive(Debug, Serialize, Deserialize)]
@@ -139,15 +136,14 @@ impl GraphUI {
     }
     ///Update the graph ui based on the message sent by the pipewire thread
     fn process_message(&mut self, message: PipewireMessage) {
-
         match message {
             PipewireMessage::NodeAdded {
                 id,
                 name,
+                description,
                 media_type,
             } => {
-
-                self.graph.add_node(name, id, media_type);
+                self.graph.add_node(name, id, description, media_type);
             }
             PipewireMessage::PortAdded {
                 node_name,
@@ -168,14 +164,19 @@ impl GraphUI {
                 from_port,
                 to_port,
             } => {
-                self.graph.add_link(id, from_node_name, to_node_name, from_port, to_port);
+                self.graph
+                    .add_link(id, from_node_name, to_node_name, from_port, to_port);
             }
             PipewireMessage::LinkStateChanged { id: _, active: _ } => {}
 
             PipewireMessage::NodeRemoved { name, id } => {
                 self.graph.remove_node(&name, id);
             }
-            PipewireMessage::PortRemoved { node_name, node_id, id } => {
+            PipewireMessage::PortRemoved {
+                node_name,
+                node_id,
+                id,
+            } => {
                 self.graph.remove_port(&node_name, node_id, id);
             }
             PipewireMessage::LinkRemoved { id } => {
@@ -256,10 +257,7 @@ impl epi::App for GraphUI {
                         to_node,
                     } => {
                         self.pipewire_sender
-                            .send(UiMessage::AddLink {
-                                from_port,
-                                to_port,
-                            })
+                            .send(UiMessage::AddLink { from_port, to_port })
                             .expect("Failed to send ui message");
                     }
                     graph::LinkUpdate::Removed(link_id) => {

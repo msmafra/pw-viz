@@ -10,21 +10,21 @@ impl Id {
 
 pub struct IdAllocator {
     freed: Vec<usize>,
-    next_id: usize
+    next_id: usize,
 }
 
 impl IdAllocator {
     pub fn new() -> Self {
         Self {
             freed: Vec::new(),
-            next_id: 0
+            next_id: 0,
         }
     }
     pub fn allocate(&mut self) -> Id {
         let inner = if let Some(id) = self.freed.pop() {
             id
         } else {
-            self.next_id+=1;
+            self.next_id += 1;
 
             self.next_id
         };
@@ -33,5 +33,5 @@ impl IdAllocator {
     }
     pub fn free(&mut self, id: Id) {
         self.freed.push(id.0);
-    } 
+    }
 }

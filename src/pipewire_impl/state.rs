@@ -2,10 +2,14 @@ use std::collections::HashMap;
 
 pub enum GlobalObject {
     Node {
-        name: String
+        name: String,
     },
     Link,
-    Port { node_name: String, node_id: u32, id: u32 },
+    Port {
+        node_name: String,
+        node_id: u32,
+        id: u32,
+    },
 }
 ///For internal state tracking, this has to be done because pipewire only provides ids of the objects it removes,
 ///which is insufficient to safely remove an object of a particular type, hence this struct serves as a lookup from id to object specific info
