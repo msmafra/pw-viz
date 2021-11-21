@@ -12,7 +12,7 @@ use super::{id::Id, port::Port, Theme};
 pub struct Node {
     id: Id,
     name: String,
-    pw_nodes: HashMap<u32, PwNode>,
+    pw_nodes: Vec<PwNode>,
     pub(super) position: Option<egui::Pos2>,
 }
 
@@ -21,7 +21,7 @@ impl Node {
         Self {
             id,
             name,
-            pw_nodes: HashMap::new(),
+            pw_nodes: Vec::new(),
             position: None,
         }
     }
@@ -38,8 +38,7 @@ impl Node {
         description: Option<String>,
         media_type: Option<MediaType>,
     ) {
-        self.pw_nodes.insert(
-            id,
+        self.pw_nodes.push(
             PwNode {
                 id,
                 description,
@@ -50,16 +49,15 @@ impl Node {
     }
     //TODO: Use pooling
     pub(super) fn remove_pw_node(&mut self, id: u32) -> bool {
-        self.pw_nodes.remove(&id);
+        self.pw_nodes.retain(|node| node.id!=id);
 
         self.pw_nodes.is_empty()
     }
 
     #[inline]
     fn get_pw_node(&mut self, id: u32) -> Option<&mut PwNode> {
-        self.pw_nodes.get_mut(&id)
+        self.pw_nodes.iter_mut().find(|node| node.id == id)
     }
-
     pub fn add_port(&mut self, node_id: u32, port: Port) {
         let pw_node = self.get_pw_node(node_id);
 
@@ -72,13 +70,18 @@ impl Node {
             .insert(port.id(), port);
     }
     pub fn remove_port(&mut self, node_id: u32, port_id: u32) {
-        if let Some(pw_node) = self.pw_nodes.get_mut(&node_id) {
+        if let Some(pw_node) = self.get_pw_node(node_id) {
             pw_node.ports.remove(&port_id);
         } else {
             log::error!("Pipewire node with id: {} was never added", node_id);
         }
     }
-    fn draw_ports<'graph, 'node>(ui_node: &'graph mut NodeConstructor<'node>, node: &'node PwNode, theme: &'node Theme, debug: bool) {
+    fn draw_ports<'graph, 'node>(
+        ui_node: &'graph mut NodeConstructor<'node>,
+        node: &'node PwNode,
+        theme: &'node Theme,
+        debug: bool,
+    ) {
         let mut ports = node.ports.values().collect::<Vec<_>>();
 
         //Sorts ports based on alphabetical ordering
@@ -112,7 +115,6 @@ impl Node {
             match port.port_type() {
                 crate::pipewire_impl::PortType::Input => {
                     if first {
-
                         ui_node.with_input_attribute(
                             port.id() as usize,
                             PinArgs {
@@ -121,12 +123,13 @@ impl Node {
                                 ..Default::default()
                             },
                             move |ui| {
-                                ui.add(egui::Label::new(node_desc).text_color(egui::Color32::WHITE));
+                                ui.add(
+                                    egui::Label::new(node_desc).text_color(egui::Color32::WHITE),
+                                );
                                 ui.label(port_name)
                             },
                         );
-                    }
-                    else {
+                    } else {
                         ui_node.with_input_attribute(
                             port.id() as usize,
                             PinArgs {
@@ -134,15 +137,12 @@ impl Node {
                                 hovered: Some(hovered),
                                 ..Default::default()
                             },
-                            |ui| {
-                                ui.label(port_name)
-                            },
+                            |ui| ui.label(port_name),
                         );
                     }
                 }
                 crate::pipewire_impl::PortType::Output => {
                     if first {
-
                         ui_node.with_output_attribute(
                             port.id() as usize,
                             PinArgs {
@@ -151,12 +151,13 @@ impl Node {
                                 ..Default::default()
                             },
                             move |ui| {
-                                ui.add(egui::Label::new(node_desc).text_color(egui::Color32::WHITE));
+                                ui.add(
+                                    egui::Label::new(node_desc).text_color(egui::Color32::WHITE),
+                                );
                                 ui.label(port_name)
                             },
                         );
-                    }
-                    else {
+                    } else {
                         ui_node.with_output_attribute(
                             port.id() as usize,
                             PinArgs {
@@ -164,9 +165,7 @@ impl Node {
                                 hovered: Some(hovered),
                                 ..Default::default()
                             },
-                            |ui| {
-                                ui.label(port_name)
-                            },
+                            |ui| ui.label(port_name),
                         );
                     }
                 }
@@ -187,7 +186,7 @@ impl Node {
                 .ui(ui)
         });
 
-        for (ix, node) in self.pw_nodes.values().enumerate() {
+        for (ix, node) in self.pw_nodes.iter().enumerate() {
             let media_type = node.media_type;
             let kind = match media_type {
                 Some(MediaType::Audio) => "🔉",
