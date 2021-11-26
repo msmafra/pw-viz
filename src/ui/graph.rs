@@ -36,9 +36,13 @@ impl Graph {
     pub fn new() -> Self {
         //context.attribute_flag_push(egui_nodes::AttributeFlags::EnableLinkCreationOnSnap);
         //context.attribute_flag_push(egui_nodes::AttributeFlags::EnableLinkDetachWithDragClick);
-        Self {
-            nodes_ctx: egui_nodes::Context::default(),
+        let mut nodes_ctx = egui_nodes::Context::default();
 
+        nodes_ctx.style.link_bezier_offset_coefficient = egui::vec2(0.50,0.0);
+        nodes_ctx.style.link_line_segments_per_length = 0.15;
+
+        Self {
+            nodes_ctx,
             node_id_allocator: IdAllocator::new(),
             nodes: HashMap::new(),
             links: HashMap::new(),
@@ -209,6 +213,11 @@ impl Graph {
         let debug_view = ctx.input().modifiers.ctrl;
 
         let mut ui_nodes = Vec::with_capacity(self.nodes.len());
+
+        self.nodes_ctx.style.colors[egui_nodes::ColorStyle::NodeBackground as usize] = theme.node_background;
+        self.nodes_ctx.style.colors[egui_nodes::ColorStyle::NodeBackgroundHovered as usize] = theme.node_background_hovered;
+        self.nodes_ctx.style.colors[egui_nodes::ColorStyle::NodeBackgroundSelected as usize] = theme.node_background_hovered;
+
 
         let mut prev_pos = egui::pos2(ui.available_width() / 4.0, ui.available_height() / 2.0);
         let mut padding = egui::pos2(75.0, 150.0);

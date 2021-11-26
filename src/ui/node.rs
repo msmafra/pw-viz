@@ -1,8 +1,7 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap};
 
 use egui::Widget;
 use egui_nodes::{NodeConstructor, PinArgs};
-use pipewire::prelude::ReadableDict;
 
 use crate::pipewire_impl::MediaType;
 

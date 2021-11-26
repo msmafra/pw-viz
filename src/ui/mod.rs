@@ -34,6 +34,9 @@ pub struct Theme {
     video_port_hovered: egui::Color32,
 
     text_color: egui::Color32,
+
+    node_background: egui::Color32,
+    node_background_hovered: egui::Color32
 }
 impl Default for Theme {
     fn default() -> Self {
@@ -45,6 +48,8 @@ impl Default for Theme {
             video_port: egui::Color32::from_rgba_unmultiplied(149, 56, 173, 255),
             video_port_hovered: egui::Color32::from_rgba_unmultiplied(148, 96, 182, 255),
             text_color: egui::Color32::WHITE,
+            node_background: egui::Color32::from_rgba_unmultiplied(50,50, 50, 255),
+            node_background_hovered: egui::Color32::from_rgba_unmultiplied(75, 75, 75, 255)
         }
     }
 }
@@ -100,6 +105,14 @@ impl GraphUI {
 
                     ui.label("Video port hovered");
                     ui.color_edit_button_srgba(&mut theme.video_port_hovered);
+                    ui.end_row();
+
+                    ui.label("Node background");
+                    ui.color_edit_button_srgba(&mut theme.node_background);
+                    ui.end_row();
+
+                    ui.label("Node background hovered");
+                    ui.color_edit_button_srgba(&mut theme.node_background_hovered);
                     ui.end_row();
 
                     ui.label("Text color");
