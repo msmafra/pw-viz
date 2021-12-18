@@ -12,6 +12,7 @@ use std::sync::mpsc::Receiver;
 
 use graph::Graph;
 use port::Port;
+use id::Id;
 
 pub const INITIAL_WIDTH: u32 = 1280;
 pub const INITIAL_HEIGHT: u32 = 720;
@@ -165,7 +166,7 @@ impl GraphUI {
                 name,
                 port_type,
             } => {
-                let port = Port::new(id, node_id, name, port_type);
+                let port = Port::new(id, name, port_type);
 
                 self.graph.add_port(node_name, node_id, port);
             }
@@ -266,8 +267,8 @@ impl epi::App for GraphUI {
                     graph::LinkUpdate::Created {
                         from_port,
                         to_port,
-                        from_node,
-                        to_node,
+                        from_node: _,
+                        to_node: _,
                     } => {
                         self.pipewire_sender
                             .send(UiMessage::AddLink { from_port, to_port })

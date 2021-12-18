@@ -1,4 +1,4 @@
-use super::id::Id;
+use super::Id;
 
 #[derive(Debug)]
 pub struct Link {

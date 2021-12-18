@@ -1,11 +1,12 @@
 use std::{collections::HashMap};
 
-use egui::Widget;
+use egui::{Widget};
 use egui_nodes::{NodeConstructor, PinArgs};
 
 use crate::pipewire_impl::MediaType;
 
-use super::{id::Id, port::Port, Theme};
+use super::{ port::Port, Theme, Id};
+
 
 #[derive(Debug)]
 pub struct Node {
@@ -185,9 +186,9 @@ impl Node {
                 .ui(ui)
         });
 
-        for (ix, node) in self.pw_nodes.iter().enumerate() {
+        for (_, node) in self.pw_nodes.iter().enumerate() {
             let media_type = node.media_type;
-            let kind = match media_type {
+            let _ = match media_type {
                 Some(MediaType::Audio) => "🔉",
                 Some(MediaType::Video) => "💻",
                 Some(MediaType::Midi) => "🎹",

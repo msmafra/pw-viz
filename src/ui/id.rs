@@ -1,37 +1,19 @@
+use std::hash::Hash;
+
+use egui::epaint::ahash::AHasher;
+use std::hash::Hasher;
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
-pub struct Id(usize);
+pub struct Id(u64);
 
 impl Id {
+    pub fn new(data: impl Hash) -> Self {
+        let mut hasher = AHasher::new_with_keys(123, 456);
+        data.hash(&mut hasher);
+        Id(hasher.finish())
+    }
     #[inline]
-    pub fn as_usize(&self) -> usize {
+    pub fn value(&self) -> u64 {
         self.0
-    }
-}
-
-pub struct IdAllocator {
-    freed: Vec<usize>,
-    next_id: usize,
-}
-
-impl IdAllocator {
-    pub fn new() -> Self {
-        Self {
-            freed: Vec::new(),
-            next_id: 0,
-        }
-    }
-    pub fn allocate(&mut self) -> Id {
-        let inner = if let Some(id) = self.freed.pop() {
-            id
-        } else {
-            self.next_id += 1;
-
-            self.next_id
-        };
-
-        Id(inner)
-    }
-    pub fn free(&mut self, id: Id) {
-        self.freed.push(id.0);
     }
 }

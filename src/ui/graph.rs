@@ -4,8 +4,9 @@ use egui_nodes::{LinkArgs, NodeArgs, NodeConstructor};
 
 use crate::pipewire_impl::MediaType;
 
+use super::id::Id;
+
 use super::{
-    id::{Id, IdAllocator},
     link::Link,
     node::Node,
     port::Port,
@@ -27,8 +28,7 @@ pub enum LinkUpdate {
 }
 pub struct Graph {
     nodes_ctx: egui_nodes::Context,
-    node_id_allocator: IdAllocator,
-    nodes: HashMap<String, Node>, //Node name to Node
+    nodes: HashMap<Id, Node>, //Node id to Node
     links: HashMap<u32, Link>,    //Link id to Link
 }
 
@@ -40,19 +40,19 @@ impl Graph {
 
         nodes_ctx.style.link_bezier_offset_coefficient = egui::vec2(0.50,0.0);
         nodes_ctx.style.link_line_segments_per_length = 0.15;
-
+        
         Self {
             nodes_ctx,
-            node_id_allocator: IdAllocator::new(),
             nodes: HashMap::new(),
             links: HashMap::new(),
         }
     }
     fn get_or_create_node(&mut self, name: String) -> &mut Node {
-        self.nodes.entry(name.clone()).or_insert_with(|| {
+        let id = Id::new(&name);
+        self.nodes.entry(id).or_insert_with(|| {
             log::debug!("Created new ui node: {}", name);
 
-            Node::new(self.node_id_allocator.allocate(), name)
+            Node::new(id.clone(), name)
         })
     }
     pub fn add_node(
@@ -68,7 +68,7 @@ impl Graph {
     pub fn remove_node(&mut self, name: &str, id: u32) {
         let mut remove_ui_node = false;
 
-        if let Some(node) = self.nodes.get_mut(name) {
+        if let Some(node) = self.nodes.get_mut(&Id::new(name)) {
             remove_ui_node = node.remove_pw_node(id);
         } else {
             log::error!("Node with name: {} was not registered", name);
@@ -76,16 +76,16 @@ impl Graph {
 
         //If there are no more pw nodes remove the ui node
         if remove_ui_node {
-            let removed_id = self.nodes.remove(name).expect("Node was never added").id();
+            let removed_node = self.nodes.remove(&Id::new(name)).expect("Node was never added");
 
-            self.node_id_allocator.free(removed_id);
+            log::debug!("Removing node {}", removed_node.name());
         }
     }
     pub fn add_port(&mut self, node_name: String, node_id: u32, port: Port) {
         self.get_or_create_node(node_name).add_port(node_id, port)
     }
     pub fn remove_port(&mut self, node_name: &str, node_id: u32, port_id: u32) {
-        if let Some(node) = self.nodes.get_mut(node_name) {
+        if let Some(node) = self.nodes.get_mut(&Id::new(node_name)) {
             node.remove_port(node_id, port_id);
         } else {
             log::error!("Node with name: {} was not registered", node_name);
@@ -109,13 +109,13 @@ impl Graph {
 
         let from_node = self
             .nodes
-            .get(&from_node_name)
+            .get(&Id::new(from_node_name))
             .expect("Node with provided name doesn't exist")
             .id();
 
         let to_node = self
             .nodes
-            .get(&to_node_name)
+            .get(&Id::new(to_node_name))
             .expect("Node with provided name doesn't exist")
             .id();
         log::debug!("{:?} {:?}", from_node, to_node);
@@ -222,14 +222,10 @@ impl Graph {
         let mut prev_pos = egui::pos2(ui.available_width() / 4.0, ui.available_height() / 2.0);
         let mut padding = egui::pos2(75.0, 150.0);
         for node_id in order {
-            let node = self
-                .nodes
-                .values()
-                .find(|node| node.id() == node_id)
-                .unwrap();
+            let node = &self.nodes[&node_id];
 
             let mut ui_node = NodeConstructor::new(
-                node.id().as_usize(),
+                node.id().value() as usize,
                 NodeArgs {
                     titlebar: Some(theme.titlebar),
                     titlebar_hovered: Some(theme.titlebar_hovered),
@@ -275,7 +271,7 @@ impl Graph {
         for node in self.nodes.values_mut() {
             node.position = self
                 .nodes_ctx
-                .get_node_pos_screen_space(node.id().as_usize());
+                .get_node_pos_screen_space(node.id().value() as usize);
         }
 
         if let Some(link) = self.nodes_ctx.link_destroyed() {
